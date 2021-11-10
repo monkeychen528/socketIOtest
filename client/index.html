@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"
+        integrity="sha384-KAZ4DtjNhLChOB/hxXuKqhMLYvx3b5MlT55xPEiNmREKRzeEm+RVPlTnAn0ajQNs"
+        crossorigin="anonymous"></script>
+    <title>Document</title>
+    <style>
+        .container {
+            display: flex;
+        }
+
+        .list {
+            width: 20%;
+            border-right: 1px solid #c3c3c3;
+        }
+
+        .list ul {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            list-style: none;
+        }
+
+        .message_container {
+            width: 80%;
+            height: 100vh;
+        }
+
+        .message_content {
+            height: 85%;
+        }
+
+        .message_send {
+            height: 15%;
+
+        }
+
+        .message_send input {
+            width: 86%;
+            height: 100%;
+            border: none;
+            border: 1px solid #cdcdcd;
+        }
+
+        .message_send button {
+            width: 10%;
+            height: 100%;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <aside class="list">
+            <ul>
+                <li data-id="room1">大廳</li>
+                <li data-id="room2">房間a</li>
+                <li data-id="room3">房間b</li>
+            </ul>
+            <ul></ul>
+        </aside>
+        <div class="message_container">
+            <div class="message_content" id="mainContent"></div>
+            <div class="message_send">
+                <input type="text" id="message_input">
+                <button type="button" id="message_btn">送出</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        const mainContent = document.querySelector("#mainContent")
+        const message_input = document.querySelector("#message_input")
+        const message_btn = document.querySelector("#message_btn")
+        // 房间更换
+        const list = document.querySelector(".list")
+
+        // 房间预设 (应该是写在后端)
+        let room = 'room1'
+        const socket = io("http://localhost:3050");
+        // socket連結
+        socket.on("connect", () => {
+            // setChatList(socket.id)
+        });
+        // socket傳訊息
+        socket.on("message", (msg) => {
+            console.log(msg.name, 'this is msg')
+            // msg.name.length、目前room所在的頻道判斷是否為房間或大廳
+            // 把訊息暫存起來
+            for (let val of list.lastElementChild.children) {
+                console.log(msg.name === room)
+                if (msg.name === room) {
+                    val.style.background = "lightblue"
+                    let prevMsg = sessionStorage.getItem(msg.name) || JSON.stringify([])
+                    console.log(prevMsg)
+                    prevMsg = JSON.parse(prevMsg)
+                    prevMsg.push(msg.msg)
+                    sessionStorage.setItem(msg.name, JSON.stringify(prevMsg))
+                    return
+                }
+            }
+            
+            writeContent(msg)
+            //   if (msg.name.length > 6 && room.indexOf('room') < 0) {} else {}
+            
+
+        })
+        // 加入聊天室新增聊天名单 init->除了自己以外所有人 
+        socket.on("init", function (opt) {
+            setChatList(opt.lists)
+            writeContent(opt)
+        })
+        socket.on("allChatIdlist", function (opt) {
+            setChatList(opt.lists)
+        })
+        socket.on("changeChatIdlist", function (opt) {
+            console.log(opt)
+        })
+
+        // 处理标签迁入聊天list
+        function setChatList(ids) {
+            console.log(ids)
+            //新增id
+            ids.forEach((id => {
+                if (id === socket.id) return
+                let li = document.createElement('li')
+                li.dataset.id = id
+                li.innerText = id
+                list.lastElementChild.append(li)
+
+                deleteChatList(id)
+            }));
+        }
+        // 刪除不存在id 需優化
+        function deleteChatList(id) {
+            console.log(id + '傳入的id')
+            for (let val of list.lastElementChild.children) {
+                if (val.dataset.id !== id) {
+                    val.remove()
+                    const tag = document.createElement('p')
+                    tag.innerText = id + "已經離開聊天室"
+                    mainContent.append(tag)
+                }
+            }
+        }
+        // 处理标签迁入container
+        function writeContent(data) {
+            const nameTag = document.createElement('h3')
+            const tag = document.createElement('p')
+            nameTag.innerText = data.name
+            tag.innerText = data.msg
+            // console.log(data,'get msg')
+            mainContent.append(nameTag)
+            mainContent.append(tag)
+        }
+        // 处理送出
+        function handleSubmit(e) {
+            socket.emit("sendMessage", { msg: message_input.value, id: room })
+            writeContent({ msg: message_input.value, name: socket.id })
+            message_input.value = ""
+            return
+        }
+        message_btn.addEventListener("click", handleSubmit)
+
+        // 处理换房事件
+        list.addEventListener("click", (e) => {
+            room = e.target.dataset.id
+
+            console.log(e.target.style.background, '換房間')
+            if (room.length>6) {
+                e.target.style.background = ""
+                let temp = sessionStorage.getItem(room)
+                console.log(JSON.parse(temp),'資料拉~')
+                return //不用加入room頻道
+            }
+            console.log('hi~')
+            socket.emit("join", e.target.dataset.id)
+        })
+    </script>
+</body>
+
+</html>
